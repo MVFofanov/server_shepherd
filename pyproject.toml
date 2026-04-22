@@ -1,0 +1,9 @@
+[project]
+name = "server-shepherd"
+version = "0.1.0"
+description = "Small local server metrics agent for server_shepherd"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[project.scripts]
+server-shepherd = "server_shepherd.agent:main"

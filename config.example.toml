@@ -1,0 +1,6 @@
+[agent]
+server_id = "cluster-node-01"
+interval_minutes = 30
+output_path = "./data/metrics.jsonl"
+disk_path = "/"
+cpu_sample_seconds = 1.0

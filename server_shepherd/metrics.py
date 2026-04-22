@@ -66,7 +66,9 @@ class MetricSnapshot:
     load_5m: float
     load_15m: float
     network_rx_bytes: int
+    network_rx_gb: float
     network_tx_bytes: int
+    network_tx_gb: float
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -123,5 +125,7 @@ def collect_metrics(server_id: str, disk_path: Path, cpu_sample_seconds: float) 
         load_5m=round(load_5m, 2),
         load_15m=round(load_15m, 2),
         network_rx_bytes=network_rx_bytes,
+        network_rx_gb=round(network_rx_bytes / (1024 ** 3), 2),
         network_tx_bytes=network_tx_bytes,
+        network_tx_gb=round(network_tx_bytes / (1024 ** 3), 2),
     )

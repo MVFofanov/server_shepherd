@@ -33,7 +33,19 @@ Each saved snapshot is already structured as JSON, so later we can:
 - `server_shepherd/storage.py`: JSONL persistence
 - `server_shepherd/telegram_sender.py`: Telegram Bot API sender
 
-## Quick start
+## What it does now
+
+Each server can:
+
+- collect local metrics
+- optionally check a website
+- save snapshots into `data/metrics.jsonl`
+- optionally send a Telegram message after each run
+- run on its own schedule with `systemd`
+
+This works well for 2 or more servers sending updates to the same Telegram bot chat, even if they report at different times.
+
+## Local run
 
 1. Copy the config:
 
@@ -44,7 +56,7 @@ cp config.example.toml config.toml
 2. Run one collection:
 
 ```sh
-python -m server_shepherd.agent --config config.toml --once
+python3 -m server_shepherd.agent --config config.toml --once
 ```
 
 3. Inspect the output file:
@@ -53,25 +65,154 @@ python -m server_shepherd.agent --config config.toml --once
 cat ./data/metrics.jsonl
 ```
 
-4. Run the loop:
+4. Optional: run the built-in loop:
 
 ```sh
-python -m server_shepherd.agent --config config.toml
+python3 -m server_shepherd.agent --config config.toml
 ```
 
-## Telegram setup
+For production on a VPS, prefer `systemd` with `--once` instead of the built-in loop.
+
+## Install On A Linux VPS
+
+These steps are suitable for your second server too.
+
+### 1. Install system packages
+
+Check Python version:
+
+```sh
+python3 --version
+```
+
+If `venv` is missing on Debian or Ubuntu, install the matching package:
+
+```sh
+sudo apt update
+sudo apt install python3.12-venv
+```
+
+If your server uses another Python version, install the matching package instead, for example `python3.11-venv`.
+
+### 2. Clone the repository
+
+```sh
+cd /home/your-user
+git clone https://github.com/MVFofanov/server_shepherd.git
+cd /home/your-user/server_shepherd
+```
+
+### 3. Create the virtual environment
+
+```sh
+python3 -m venv server_shepherd_env
+source server_shepherd_env/bin/activate
+python -m pip install --upgrade pip
+```
+
+No Telegram Python package is required right now. The project uses the standard library for Telegram API calls.
+
+### 4. Create the real config
+
+```sh
+cp config.example.toml config.toml
+```
+
+Edit `config.toml` for that server.
+
+Example:
+
+```toml
+[agent]
+server_id = "second-server"
+interval_minutes = 60
+output_path = "./data/metrics.jsonl"
+disk_path = "/"
+cpu_sample_seconds = 1.0
+
+[privacy]
+message_mode = "privacy_first"
+
+[privacy.traffic_mb]
+medium = 5.0
+high = 20.0
+very_high = 100.0
+
+[telegram]
+enabled = true
+chat_id = "your_chat_id_here"
+bot_token_env = "SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN"
+
+[website]
+url = "https://example.com/"
+expected_status = 200
+timeout_seconds = 5.0
+
+[thresholds.cpu_percent]
+warning = 70.0
+critical = 90.0
+
+[thresholds.memory_percent]
+warning = 75.0
+critical = 90.0
+
+[thresholds.disk_percent]
+warning = 80.0
+critical = 90.0
+```
+
+### 5. Create the environment file for the bot token
+
+Create `/home/your-user/server_shepherd/server_shepherd.env`:
+
+```sh
+cat > /home/your-user/server_shepherd/server_shepherd.env <<'EOF'
+SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN=your_real_bot_token_here
+EOF
+chmod 600 /home/your-user/server_shepherd/server_shepherd.env
+```
+
+This is better than hardcoding secrets into the `systemd` service file.
+
+### 6. Test one run manually
+
+```sh
+cd /home/your-user/server_shepherd
+source server_shepherd_env/bin/activate
+python -m server_shepherd.agent --config config.toml --once
+```
+
+Confirm:
+
+- `data/metrics.jsonl` contains a new JSON line
+- the Telegram bot chat receives a message if Telegram is enabled
+
+## Telegram Setup
 
 The project can send messages without any external Python package by using the Telegram Bot API directly.
 
 1. Create a bot with BotFather.
-2. Put the bot token in an environment variable on the server:
+2. Open the bot chat and press `Start`.
+3. Get your `chat_id` by opening:
+
+```text
+https://api.telegram.org/botYOUR_BOT_TOKEN/getUpdates
+```
+
+Then look for:
+
+```json
+"chat":{"id":123456789,"type":"private"}
+```
+
+4. Put the bot token into `server_shepherd.env` or export it manually:
 
 ```sh
 export SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN="your_bot_token_here"
 ```
 
-3. Enable the `[telegram]` section in `config.toml` and set your `chat_id`.
-4. Choose a message mode in `[privacy]`:
+5. Enable the `[telegram]` section in `config.toml` and set your `chat_id`.
+6. Choose a message mode in `[privacy]`:
 
 - `privacy_first`: only safe summaries like `CPU: normal` and `Traffic: low`
 - `middle`: rounded percentages plus downloaded/uploaded traffic for the last interval
@@ -83,11 +224,94 @@ You can also tune privacy-first traffic labels in `[privacy.traffic_mb]`:
 - from `high` to below `very_high`: `high`
 - `very_high` or above: `very high`
 
+## systemd Setup
+
+The recommended production setup is a `oneshot` service plus a timer.
+
+Create `/etc/systemd/system/server-shepherd.service`:
+
+```ini
+[Unit]
+Description=Server Shepherd metrics collection
+
+[Service]
+Type=oneshot
+User=your-user
+WorkingDirectory=/home/your-user/server_shepherd
+EnvironmentFile=/home/your-user/server_shepherd/server_shepherd.env
+ExecStart=/home/your-user/server_shepherd/server_shepherd_env/bin/python -m server_shepherd.agent --config /home/your-user/server_shepherd/config.toml --once
+```
+
+Create `/etc/systemd/system/server-shepherd.timer`:
+
+```ini
+[Unit]
+Description=Run Server Shepherd every 60 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60min
+Unit=server-shepherd.service
+
+[Install]
+WantedBy=timers.target
+```
+
+Adjust `60min` to whatever interval you want the server to use.
+
+Reload and start:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now server-shepherd.timer
+```
+
+Check timer status:
+
+```sh
+systemctl status server-shepherd.timer
+systemctl list-timers --all | grep server-shepherd
+```
+
+Check service logs:
+
+```sh
+systemctl status server-shepherd.service
+journalctl -u server-shepherd.service -n 50 --no-pager
+```
+
+For a `Type=oneshot` service, `inactive (dead)` after a successful run is normal.
+
+## Running On Two Servers
+
+Repeat the same install steps on the second server:
+
+- clone the repo
+- create `server_shepherd_env`
+- create that server's `config.toml`
+- create that server's `server_shepherd.env`
+- enable its own `server-shepherd.timer`
+
+Good practice:
+
+- use a different `server_id` on each server
+- keep separate `config.toml` files on each server
+- both servers can send to the same Telegram `chat_id`
+- they do not need to run at the same minute
+
+Example:
+
+- `server-a` runs every 30 minutes
+- `server-b` runs every 60 minutes
+
+Both can still send messages into the same bot chat.
+
 ## Notes
 
 - This MVP targets Linux nodes because it reads `/proc` for low-dependency metric collection.
 - The loop runs in-process for easy testing. For production, the cleaner next step is usually a systemd timer or cron job that runs `--once`.
 - The JSONL output is sanitized and local-only. No network transfer is done yet.
+- `interval_minutes` in `config.toml` matters for the built-in Python loop. If you use `systemd`, the timer file controls the real schedule.
 
 ## Git advice
 

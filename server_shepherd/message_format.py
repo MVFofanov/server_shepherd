@@ -16,18 +16,24 @@ def _friendly_metric_status(status: str) -> str:
     }.get(status, status)
 
 
-def _friendly_traffic_level(payload: dict[str, object]) -> str:
+def _friendly_traffic_level(payload: dict[str, object], medium_mb: float, high_mb: float, very_high_mb: float) -> str:
     total_mb = float(payload.get("network_rx_delta_mb", 0.0)) + float(payload.get("network_tx_delta_mb", 0.0))
-    if total_mb >= 100:
+    if total_mb >= very_high_mb:
         return "very high"
-    if total_mb >= 20:
+    if total_mb >= high_mb:
         return "high"
-    if total_mb >= 5:
+    if total_mb >= medium_mb:
         return "medium"
     return "low"
 
 
-def build_status_message(payload: dict[str, object], message_mode: str) -> str:
+def build_status_message(
+    payload: dict[str, object],
+    message_mode: str,
+    traffic_medium_mb: float,
+    traffic_high_mb: float,
+    traffic_very_high_mb: float,
+) -> str:
     website_text = "OK" if payload.get("website_ok") is True else "DOWN" if payload.get("website_ok") is False else "not checked"
     time_text = _format_timestamp(str(payload["timestamp"]))
 
@@ -40,7 +46,7 @@ def build_status_message(payload: dict[str, object], message_mode: str) -> str:
                 f"RAM: {_friendly_metric_status(str(payload['memory_status']))}",
                 f"Disk: {_friendly_metric_status(str(payload['disk_status']))}",
                 f"Website: {website_text}",
-                f"Traffic: {_friendly_traffic_level(payload)}",
+                f"Traffic: {_friendly_traffic_level(payload, traffic_medium_mb, traffic_high_mb, traffic_very_high_mb)}",
                 f"Time: {time_text}",
             ]
         )

@@ -8,6 +8,11 @@ cpu_sample_seconds = 1.0
 [privacy]
 message_mode = "middle"
 
+[privacy.traffic_mb]
+medium = 5.0
+high = 20.0
+very_high = 100.0
+
 [telegram]
 enabled = false
 chat_id = "123456789"

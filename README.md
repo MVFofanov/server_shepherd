@@ -76,6 +76,13 @@ export SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN="your_bot_token_here"
 - `privacy_first`: only safe summaries like `CPU: normal` and `Traffic: low`
 - `middle`: rounded percentages plus downloaded/uploaded traffic for the last interval
 
+You can also tune privacy-first traffic labels in `[privacy.traffic_mb]`:
+
+- below `medium`: `low`
+- from `medium` to below `high`: `medium`
+- from `high` to below `very_high`: `high`
+- `very_high` or above: `very high`
+
 ## Notes
 
 - This MVP targets Linux nodes because it reads `/proc` for low-dependency metric collection.

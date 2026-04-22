@@ -68,7 +68,13 @@ def run_once(config_path: str) -> dict[str, object]:
     ) else "warning" if "warning" in metric_statuses else "ok"
     append_jsonl(config.output_path, payload)
     if config.telegram is not None:
-        message = build_status_message(payload, config.privacy.message_mode)
+        message = build_status_message(
+            payload,
+            config.privacy.message_mode,
+            config.privacy.traffic_medium_mb,
+            config.privacy.traffic_high_mb,
+            config.privacy.traffic_very_high_mb,
+        )
         send_telegram_message(
             bot_token=config.telegram.get_bot_token(),
             chat_id=config.telegram.chat_id,

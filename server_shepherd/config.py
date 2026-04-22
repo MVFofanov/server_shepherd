@@ -22,6 +22,9 @@ class WebsiteCheckConfig:
 @dataclass(slots=True)
 class PrivacyConfig:
     message_mode: str
+    traffic_medium_mb: float
+    traffic_high_mb: float
+    traffic_very_high_mb: float
 
 
 @dataclass(slots=True)
@@ -88,7 +91,23 @@ def _load_privacy_config(section: dict[str, object]) -> PrivacyConfig:
     message_mode = str(section.get("message_mode", "middle")).strip().lower()
     if message_mode not in {"privacy_first", "middle"}:
         raise ValueError("privacy.message_mode must be 'privacy_first' or 'middle'.")
-    return PrivacyConfig(message_mode=message_mode)
+
+    traffic_section = section.get("traffic_mb", {})
+    medium = float(traffic_section.get("medium", 5.0))
+    high = float(traffic_section.get("high", 20.0))
+    very_high = float(traffic_section.get("very_high", 100.0))
+
+    if medium < 0 or high < 0 or very_high < 0:
+        raise ValueError("privacy traffic thresholds must be non-negative.")
+    if not (medium < high < very_high):
+        raise ValueError("privacy traffic thresholds must satisfy medium < high < very_high.")
+
+    return PrivacyConfig(
+        message_mode=message_mode,
+        traffic_medium_mb=medium,
+        traffic_high_mb=high,
+        traffic_very_high_mb=very_high,
+    )
 
 
 def _load_telegram_config(section: dict[str, object]) -> TelegramConfig | None:

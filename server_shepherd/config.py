@@ -12,12 +12,20 @@ class ThresholdConfig:
 
 
 @dataclass(slots=True)
+class WebsiteCheckConfig:
+    url: str
+    expected_status: int
+    timeout_seconds: float
+
+
+@dataclass(slots=True)
 class AgentConfig:
     server_id: str
     interval_minutes: int
     output_path: Path
     disk_path: Path
     cpu_sample_seconds: float
+    website: WebsiteCheckConfig | None
     cpu_percent_thresholds: ThresholdConfig
     memory_percent_thresholds: ThresholdConfig
     disk_percent_thresholds: ThresholdConfig
@@ -31,6 +39,26 @@ def _load_threshold(section: dict[str, object], default_warning: float, default_
     if critical <= warning:
         raise ValueError("Threshold critical value must be greater than warning.")
     return ThresholdConfig(warning=warning, critical=critical)
+
+
+def _load_website_config(section: dict[str, object]) -> WebsiteCheckConfig | None:
+    if not section:
+        return None
+
+    url = str(section.get("url", "")).strip()
+    if not url:
+        return None
+
+    expected_status = int(section.get("expected_status", 200))
+    timeout_seconds = float(section.get("timeout_seconds", 5.0))
+    if timeout_seconds <= 0:
+        raise ValueError("website.timeout_seconds must be greater than zero.")
+
+    return WebsiteCheckConfig(
+        url=url,
+        expected_status=expected_status,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def load_config(path: str | Path) -> AgentConfig:
@@ -56,6 +84,7 @@ def load_config(path: str | Path) -> AgentConfig:
     if cpu_sample_seconds <= 0:
         raise ValueError("agent.cpu_sample_seconds must be greater than zero.")
 
+    website = _load_website_config(data.get("website", {}))
     thresholds = data.get("thresholds", {})
     cpu_thresholds = _load_threshold(thresholds.get("cpu_percent", {}), 70.0, 90.0)
     memory_thresholds = _load_threshold(thresholds.get("memory_percent", {}), 75.0, 90.0)
@@ -67,6 +96,7 @@ def load_config(path: str | Path) -> AgentConfig:
         output_path=output_path,
         disk_path=disk_path,
         cpu_sample_seconds=cpu_sample_seconds,
+        website=website,
         cpu_percent_thresholds=cpu_thresholds,
         memory_percent_thresholds=memory_thresholds,
         disk_percent_thresholds=disk_thresholds,

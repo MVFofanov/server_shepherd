@@ -4,7 +4,7 @@ import argparse
 import time
 
 from .config import load_config
-from .metrics import collect_metrics
+from .metrics import check_website, collect_metrics
 from .storage import append_jsonl, read_last_jsonl
 
 
@@ -48,6 +48,14 @@ def run_once(config_path: str) -> dict[str, object]:
         config.disk_percent_thresholds.warning,
         config.disk_percent_thresholds.critical,
     )
+    if config.website is not None:
+        payload.update(
+            check_website(
+                url=config.website.url,
+                expected_status=config.website.expected_status,
+                timeout_seconds=config.website.timeout_seconds,
+            )
+        )
     payload["status"] = "critical" if "critical" in (
         payload["cpu_status"],
         payload["memory_status"],

@@ -6,6 +6,8 @@ from pathlib import Path
 import os
 import shutil
 import time
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 def _read_proc_stat() -> tuple[int, int]:
@@ -69,6 +71,10 @@ class MetricSnapshot:
     network_rx_gb: float
     network_tx_bytes: int
     network_tx_gb: float
+    website_url: str | None = None
+    website_ok: bool | None = None
+    website_status_code: int | None = None
+    website_response_ms: float | None = None
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -102,6 +108,39 @@ def _read_network_totals() -> tuple[int, int]:
         tx_total += int(fields[8])
 
     return rx_total, tx_total
+
+
+def check_website(url: str, expected_status: int, timeout_seconds: float) -> dict[str, object]:
+    request = Request(url, method="GET")
+    started = time.perf_counter()
+
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            status_code = response.getcode()
+    except HTTPError as exc:
+        status_code = exc.code
+        response_ms = round((time.perf_counter() - started) * 1000, 2)
+        return {
+            "website_url": url,
+            "website_ok": status_code == expected_status,
+            "website_status_code": status_code,
+            "website_response_ms": response_ms,
+        }
+    except URLError:
+        return {
+            "website_url": url,
+            "website_ok": False,
+            "website_status_code": None,
+            "website_response_ms": None,
+        }
+
+    response_ms = round((time.perf_counter() - started) * 1000, 2)
+    return {
+        "website_url": url,
+        "website_ok": status_code == expected_status,
+        "website_status_code": status_code,
+        "website_response_ms": response_ms,
+    }
 
 
 def collect_metrics(server_id: str, disk_path: Path, cpu_sample_seconds: float) -> MetricSnapshot:

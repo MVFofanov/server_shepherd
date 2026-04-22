@@ -6,6 +6,7 @@ This MVP is intentionally narrow:
 
 - runs locally on a Linux server
 - reads CPU, RAM, disk, uptime, and load average
+- can optionally check a website URL for HTTP status and response time
 - appends snapshots to a JSON Lines file on disk
 - uses a small TOML config file for changeable settings
 - can run once for testing or stay in a 30-minute loop

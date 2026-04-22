@@ -4,3 +4,15 @@ interval_minutes = 30
 output_path = "./data/metrics.jsonl"
 disk_path = "/"
 cpu_sample_seconds = 1.0
+
+[thresholds.cpu_percent]
+warning = 70.0
+critical = 90.0
+
+[thresholds.memory_percent]
+warning = 75.0
+critical = 90.0
+
+[thresholds.disk_percent]
+warning = 80.0
+critical = 90.0

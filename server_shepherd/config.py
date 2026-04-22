@@ -6,12 +6,31 @@ import tomllib
 
 
 @dataclass(slots=True)
+class ThresholdConfig:
+    warning: float
+    critical: float
+
+
+@dataclass(slots=True)
 class AgentConfig:
     server_id: str
     interval_minutes: int
     output_path: Path
     disk_path: Path
     cpu_sample_seconds: float
+    cpu_percent_thresholds: ThresholdConfig
+    memory_percent_thresholds: ThresholdConfig
+    disk_percent_thresholds: ThresholdConfig
+
+
+def _load_threshold(section: dict[str, object], default_warning: float, default_critical: float) -> ThresholdConfig:
+    warning = float(section.get("warning", default_warning))
+    critical = float(section.get("critical", default_critical))
+    if warning < 0 or critical < 0:
+        raise ValueError("Thresholds must be non-negative.")
+    if critical <= warning:
+        raise ValueError("Threshold critical value must be greater than warning.")
+    return ThresholdConfig(warning=warning, critical=critical)
 
 
 def load_config(path: str | Path) -> AgentConfig:
@@ -37,10 +56,18 @@ def load_config(path: str | Path) -> AgentConfig:
     if cpu_sample_seconds <= 0:
         raise ValueError("agent.cpu_sample_seconds must be greater than zero.")
 
+    thresholds = data.get("thresholds", {})
+    cpu_thresholds = _load_threshold(thresholds.get("cpu_percent", {}), 70.0, 90.0)
+    memory_thresholds = _load_threshold(thresholds.get("memory_percent", {}), 75.0, 90.0)
+    disk_thresholds = _load_threshold(thresholds.get("disk_percent", {}), 80.0, 90.0)
+
     return AgentConfig(
         server_id=server_id,
         interval_minutes=interval_minutes,
         output_path=output_path,
         disk_path=disk_path,
         cpu_sample_seconds=cpu_sample_seconds,
+        cpu_percent_thresholds=cpu_thresholds,
+        memory_percent_thresholds=memory_thresholds,
+        disk_percent_thresholds=disk_thresholds,
     )

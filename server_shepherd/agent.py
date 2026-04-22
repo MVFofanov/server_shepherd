@@ -8,6 +8,14 @@ from .metrics import collect_metrics
 from .storage import append_jsonl, read_last_jsonl
 
 
+def _metric_status(value: float, warning: float, critical: float) -> str:
+    if value >= critical:
+        return "critical"
+    if value >= warning:
+        return "warning"
+    return "ok"
+
+
 def run_once(config_path: str) -> dict[str, object]:
     config = load_config(config_path)
     previous_payload = read_last_jsonl(config.output_path)
@@ -25,6 +33,30 @@ def run_once(config_path: str) -> dict[str, object]:
     payload["network_rx_delta_mb"] = round(rx_delta_bytes / (1024 ** 2), 2)
     payload["network_tx_delta_bytes"] = tx_delta_bytes
     payload["network_tx_delta_mb"] = round(tx_delta_bytes / (1024 ** 2), 2)
+    payload["cpu_status"] = _metric_status(
+        float(payload["cpu_percent"]),
+        config.cpu_percent_thresholds.warning,
+        config.cpu_percent_thresholds.critical,
+    )
+    payload["memory_status"] = _metric_status(
+        float(payload["memory_percent"]),
+        config.memory_percent_thresholds.warning,
+        config.memory_percent_thresholds.critical,
+    )
+    payload["disk_status"] = _metric_status(
+        float(payload["disk_percent"]),
+        config.disk_percent_thresholds.warning,
+        config.disk_percent_thresholds.critical,
+    )
+    payload["status"] = "critical" if "critical" in (
+        payload["cpu_status"],
+        payload["memory_status"],
+        payload["disk_status"],
+    ) else "warning" if "warning" in (
+        payload["cpu_status"],
+        payload["memory_status"],
+        payload["disk_status"],
+    ) else "ok"
     append_jsonl(config.output_path, payload)
     return payload
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import tomllib
 
 
@@ -19,6 +20,26 @@ class WebsiteCheckConfig:
 
 
 @dataclass(slots=True)
+class PrivacyConfig:
+    message_mode: str
+
+
+@dataclass(slots=True)
+class TelegramConfig:
+    enabled: bool
+    chat_id: str
+    bot_token_env: str
+
+    def get_bot_token(self) -> str:
+        token = os.environ.get(self.bot_token_env, "").strip()
+        if not token:
+            raise ValueError(
+                f"Telegram is enabled, but environment variable {self.bot_token_env} is not set."
+            )
+        return token
+
+
+@dataclass(slots=True)
 class AgentConfig:
     server_id: str
     interval_minutes: int
@@ -26,6 +47,8 @@ class AgentConfig:
     disk_path: Path
     cpu_sample_seconds: float
     website: WebsiteCheckConfig | None
+    privacy: PrivacyConfig
+    telegram: TelegramConfig | None
     cpu_percent_thresholds: ThresholdConfig
     memory_percent_thresholds: ThresholdConfig
     disk_percent_thresholds: ThresholdConfig
@@ -61,6 +84,31 @@ def _load_website_config(section: dict[str, object]) -> WebsiteCheckConfig | Non
     )
 
 
+def _load_privacy_config(section: dict[str, object]) -> PrivacyConfig:
+    message_mode = str(section.get("message_mode", "middle")).strip().lower()
+    if message_mode not in {"privacy_first", "middle"}:
+        raise ValueError("privacy.message_mode must be 'privacy_first' or 'middle'.")
+    return PrivacyConfig(message_mode=message_mode)
+
+
+def _load_telegram_config(section: dict[str, object]) -> TelegramConfig | None:
+    if not section or not bool(section.get("enabled", False)):
+        return None
+
+    chat_id = str(section.get("chat_id", "")).strip()
+    bot_token_env = str(section.get("bot_token_env", "")).strip()
+    if not chat_id:
+        raise ValueError("telegram.chat_id must be set when telegram is enabled.")
+    if not bot_token_env:
+        raise ValueError("telegram.bot_token_env must be set when telegram is enabled.")
+
+    return TelegramConfig(
+        enabled=True,
+        chat_id=chat_id,
+        bot_token_env=bot_token_env,
+    )
+
+
 def load_config(path: str | Path) -> AgentConfig:
     config_path = Path(path)
     with config_path.open("rb") as handle:
@@ -85,6 +133,8 @@ def load_config(path: str | Path) -> AgentConfig:
         raise ValueError("agent.cpu_sample_seconds must be greater than zero.")
 
     website = _load_website_config(data.get("website", {}))
+    privacy = _load_privacy_config(data.get("privacy", {}))
+    telegram = _load_telegram_config(data.get("telegram", {}))
     thresholds = data.get("thresholds", {})
     cpu_thresholds = _load_threshold(thresholds.get("cpu_percent", {}), 70.0, 90.0)
     memory_thresholds = _load_threshold(thresholds.get("memory_percent", {}), 75.0, 90.0)
@@ -97,6 +147,8 @@ def load_config(path: str | Path) -> AgentConfig:
         disk_path=disk_path,
         cpu_sample_seconds=cpu_sample_seconds,
         website=website,
+        privacy=privacy,
+        telegram=telegram,
         cpu_percent_thresholds=cpu_thresholds,
         memory_percent_thresholds=memory_thresholds,
         disk_percent_thresholds=disk_thresholds,

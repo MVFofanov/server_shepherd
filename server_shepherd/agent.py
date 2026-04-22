@@ -4,8 +4,10 @@ import argparse
 import time
 
 from .config import load_config
+from .message_format import build_status_message
 from .metrics import check_website, collect_metrics
 from .storage import append_jsonl, read_last_jsonl
+from .telegram_sender import send_telegram_message
 
 
 def _metric_status(value: float, warning: float, critical: float) -> str:
@@ -65,6 +67,13 @@ def run_once(config_path: str) -> dict[str, object]:
         payload.get("website_ok") is False or "critical" in metric_statuses
     ) else "warning" if "warning" in metric_statuses else "ok"
     append_jsonl(config.output_path, payload)
+    if config.telegram is not None:
+        message = build_status_message(payload, config.privacy.message_mode)
+        send_telegram_message(
+            bot_token=config.telegram.get_bot_token(),
+            chat_id=config.telegram.chat_id,
+            text=message,
+        )
     return payload
 
 

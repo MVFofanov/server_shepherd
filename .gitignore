@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+server_shepherd_env/
 .env
 config.toml
 data/

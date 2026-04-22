@@ -5,6 +5,14 @@ output_path = "./data/metrics.jsonl"
 disk_path = "/"
 cpu_sample_seconds = 1.0
 
+[privacy]
+message_mode = "middle"
+
+[telegram]
+enabled = false
+chat_id = "123456789"
+bot_token_env = "SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN"
+
 [website]
 url = "https://google.com/"
 expected_status = 200

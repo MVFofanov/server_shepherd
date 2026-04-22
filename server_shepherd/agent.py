@@ -56,15 +56,14 @@ def run_once(config_path: str) -> dict[str, object]:
                 timeout_seconds=config.website.timeout_seconds,
             )
         )
-    payload["status"] = "critical" if "critical" in (
+    metric_statuses = (
         payload["cpu_status"],
         payload["memory_status"],
         payload["disk_status"],
-    ) else "warning" if "warning" in (
-        payload["cpu_status"],
-        payload["memory_status"],
-        payload["disk_status"],
-    ) else "ok"
+    )
+    payload["status"] = "critical" if (
+        payload.get("website_ok") is False or "critical" in metric_statuses
+    ) else "warning" if "warning" in metric_statuses else "ok"
     append_jsonl(config.output_path, payload)
     return payload
 

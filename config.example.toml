@@ -6,7 +6,7 @@ disk_path = "/"
 cpu_sample_seconds = 1.0
 
 [website]
-url = "https://silmarilgames.com/"
+url = "https://google.com/"
 expected_status = 200
 timeout_seconds = 5.0
 

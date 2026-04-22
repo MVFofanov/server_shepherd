@@ -5,17 +5,26 @@ import time
 
 from .config import load_config
 from .metrics import collect_metrics
-from .storage import append_jsonl
+from .storage import append_jsonl, read_last_jsonl
 
 
 def run_once(config_path: str) -> dict[str, object]:
     config = load_config(config_path)
+    previous_payload = read_last_jsonl(config.output_path)
     snapshot = collect_metrics(
         server_id=config.server_id,
         disk_path=config.disk_path,
         cpu_sample_seconds=config.cpu_sample_seconds,
     )
     payload = snapshot.as_dict()
+    previous_rx = int(previous_payload.get("network_rx_bytes", 0)) if previous_payload else 0
+    previous_tx = int(previous_payload.get("network_tx_bytes", 0)) if previous_payload else 0
+    rx_delta_bytes = max(0, int(payload["network_rx_bytes"]) - previous_rx)
+    tx_delta_bytes = max(0, int(payload["network_tx_bytes"]) - previous_tx)
+    payload["network_rx_delta_bytes"] = rx_delta_bytes
+    payload["network_rx_delta_mb"] = round(rx_delta_bytes / (1024 ** 2), 2)
+    payload["network_tx_delta_bytes"] = tx_delta_bytes
+    payload["network_tx_delta_mb"] = round(tx_delta_bytes / (1024 ** 2), 2)
     append_jsonl(config.output_path, payload)
     return payload
 

@@ -84,6 +84,10 @@ def build_daily_summary(
             "disk_percent": 0.0,
             "traffic_downloaded_mb": 0.0,
             "traffic_uploaded_mb": 0.0,
+            "cpu_status": "ok",
+            "memory_status": "ok",
+            "disk_status": "ok",
+            "website_status": "ok",
             "website_checks_ok": 0,
             "website_checks_total": 0,
         }
@@ -94,9 +98,13 @@ def build_daily_summary(
     rx_values = [float(row.get("network_rx_delta_mb", 0.0)) for row in rows]
     tx_values = [float(row.get("network_tx_delta_mb", 0.0)) for row in rows]
     statuses = [str(row.get("status", "ok")) for row in rows]
+    cpu_statuses = [str(row.get("cpu_status", "ok")) for row in rows]
+    memory_statuses = [str(row.get("memory_status", "ok")) for row in rows]
+    disk_statuses = [str(row.get("disk_status", "ok")) for row in rows]
 
     website_rows = [row for row in rows if "website_ok" in row]
     website_ok_count = sum(1 for row in website_rows if row.get("website_ok") is True)
+    website_status = "critical" if website_rows and website_ok_count < len(website_rows) else "ok"
 
     overall_status = _worst_status(statuses)
 
@@ -115,6 +123,10 @@ def build_daily_summary(
         "disk_percent": _round(max(disk_values)),
         "traffic_downloaded_mb": _round(sum(rx_values)),
         "traffic_uploaded_mb": _round(sum(tx_values)),
+        "cpu_status": _worst_status(cpu_statuses),
+        "memory_status": _worst_status(memory_statuses),
+        "disk_status": _worst_status(disk_statuses),
+        "website_status": website_status,
         "website_checks_ok": website_ok_count,
         "website_checks_total": len(website_rows),
     }
@@ -125,11 +137,11 @@ def build_daily_report_message(summary: dict[str, object]) -> str:
     header = f"{summary['server_id']} {_status_icon(status)} ({summary['status_label']})"
     lines = [
         header,
-        f"• CPU avg/max: {round(float(summary['cpu_avg_percent']))}% / {round(float(summary['cpu_max_percent']))}%",
-        f"• RAM avg/max: {round(float(summary['memory_avg_percent']))}% / {round(float(summary['memory_max_percent']))}%",
-        f"• Disk usage: {round(float(summary['disk_percent']))} %",
+        f"{_status_icon(str(summary['cpu_status']))} CPU avg/max: {round(float(summary['cpu_avg_percent']))}% / {round(float(summary['cpu_max_percent']))}%",
+        f"{_status_icon(str(summary['memory_status']))} RAM avg/max: {round(float(summary['memory_avg_percent']))}% / {round(float(summary['memory_max_percent']))}%",
+        f"{_status_icon(str(summary['disk_status']))} Disk usage: {round(float(summary['disk_percent']))} %",
         (
-            "• Traffic ⬇️ "
+            "✅ Traffic ⬇️ "
             f"{float(summary['traffic_downloaded_mb']):.2f} MB "
             "⬆️ "
             f"{float(summary['traffic_uploaded_mb']):.2f} MB"
@@ -138,7 +150,7 @@ def build_daily_report_message(summary: dict[str, object]) -> str:
 
     if int(summary["website_checks_total"]) > 0:
         lines.append(
-            f"• Website checks: {summary['website_checks_ok']}/{summary['website_checks_total']} OK"
+            f"{_status_icon(str(summary['website_status']))} Website checks: {summary['website_checks_ok']}/{summary['website_checks_total']} OK"
         )
 
     lines.append(f"• Samples: {summary['sample_count']}")

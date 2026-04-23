@@ -1,6 +1,6 @@
 [agent]
 server_id = "cluster-node-01"
-interval_minutes = 30
+interval_minutes = 10
 output_path = "./data/metrics.jsonl"
 disk_path = "/"
 cpu_sample_seconds = 1.0
@@ -17,6 +17,12 @@ very_high = 100.0
 enabled = false
 chat_id = "123456789"
 bot_token_env = "SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN"
+send_on_regular_check = false
+send_on_daily_report = true
+
+[report]
+output_path = "./data/daily_metrics.jsonl"
+default_window_hours = 24
 
 [website]
 url = "https://google.com/"

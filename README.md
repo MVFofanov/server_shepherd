@@ -40,7 +40,8 @@ Each server can:
 - collect local metrics
 - optionally check a website
 - save snapshots into `data/metrics.jsonl`
-- optionally send a Telegram message after each run
+- build a daily summary into `data/daily_metrics.jsonl`
+- optionally send a Telegram message after each run or only for the daily report
 - run on its own schedule with `systemd`
 
 This works well for 2 or more servers sending updates to the same Telegram bot chat, even if they report at different times.
@@ -89,6 +90,7 @@ If `venv` is missing on Debian or Ubuntu, install the matching package:
 
 ```sh
 sudo apt update
+sudo apt upgrade
 sudo apt install python3.12-venv
 ```
 
@@ -125,7 +127,7 @@ Example:
 ```toml
 [agent]
 server_id = "second-server"
-interval_minutes = 60
+interval_minutes = 10
 output_path = "./data/metrics.jsonl"
 disk_path = "/"
 cpu_sample_seconds = 1.0
@@ -142,6 +144,12 @@ very_high = 100.0
 enabled = true
 chat_id = "your_chat_id_here"
 bot_token_env = "SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN"
+send_on_regular_check = false
+send_on_daily_report = true
+
+[report]
+output_path = "./data/daily_metrics.jsonl"
+default_window_hours = 24
 
 [website]
 url = "https://example.com/"
@@ -180,12 +188,14 @@ This is better than hardcoding secrets into the `systemd` service file.
 cd /home/your-user/server_shepherd
 source server_shepherd_env/bin/activate
 python -m server_shepherd.agent --config config.toml --once
+python -m server_shepherd.agent --config config.toml --daily-report --no-save
 ```
 
 Confirm:
 
 - `data/metrics.jsonl` contains a new JSON line
-- the Telegram bot chat receives a message if Telegram is enabled
+- `--daily-report --no-save` builds a preview report without shifting the saved daily-report window
+- the Telegram bot chat receives a message if Telegram is enabled for that command
 
 ## Telegram Setup
 
@@ -226,13 +236,16 @@ You can also tune privacy-first traffic labels in `[privacy.traffic_mb]`:
 
 ## systemd Setup
 
-The recommended production setup is a `oneshot` service plus a timer.
+The recommended production setup is two `oneshot` services with two timers:
 
-Create `/etc/systemd/system/server-shepherd.service`:
+- one every 10 minutes for raw metric collection
+- one daily at report time for the Telegram summary
+
+Create `/etc/systemd/system/server-shepherd-collect.service`:
 
 ```ini
 [Unit]
-Description=Server Shepherd metrics collection
+Description=Server Shepherd metric collection
 
 [Service]
 Type=oneshot
@@ -242,42 +255,73 @@ EnvironmentFile=/home/your-user/server_shepherd/server_shepherd.env
 ExecStart=/home/your-user/server_shepherd/server_shepherd_env/bin/python -m server_shepherd.agent --config /home/your-user/server_shepherd/config.toml --once
 ```
 
-Create `/etc/systemd/system/server-shepherd.timer`:
+Create `/etc/systemd/system/server-shepherd-collect.timer`:
 
 ```ini
 [Unit]
-Description=Run Server Shepherd every 60 minutes
+Description=Run Server Shepherd collection every 10 minutes
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=60min
-Unit=server-shepherd.service
+OnCalendar=*:0/10
+Persistent=true
+Unit=server-shepherd-collect.service
 
 [Install]
 WantedBy=timers.target
 ```
 
-Adjust `60min` to whatever interval you want the server to use.
+Create `/etc/systemd/system/server-shepherd-report.service`:
+
+```ini
+[Unit]
+Description=Server Shepherd daily report
+
+[Service]
+Type=oneshot
+User=your-user
+WorkingDirectory=/home/your-user/server_shepherd
+EnvironmentFile=/home/your-user/server_shepherd/server_shepherd.env
+ExecStart=/home/your-user/server_shepherd/server_shepherd_env/bin/python -m server_shepherd.agent --config /home/your-user/server_shepherd/config.toml --daily-report
+```
+
+Create `/etc/systemd/system/server-shepherd-report.timer`:
+
+```ini
+[Unit]
+Description=Run Server Shepherd daily report at 21:00 Berlin time
+
+[Timer]
+OnCalendar=*-*-* 21:00:00 Europe/Berlin
+Persistent=true
+Unit=server-shepherd-report.service
+
+[Install]
+WantedBy=timers.target
+```
 
 Reload and start:
 
 ```sh
 sudo systemctl daemon-reload
-sudo systemctl enable --now server-shepherd.timer
+sudo systemctl enable --now server-shepherd-collect.timer
+sudo systemctl enable --now server-shepherd-report.timer
 ```
 
 Check timer status:
 
 ```sh
-systemctl status server-shepherd.timer
+systemctl status server-shepherd-collect.timer
+systemctl status server-shepherd-report.timer
 systemctl list-timers --all | grep server-shepherd
 ```
 
 Check service logs:
 
 ```sh
-systemctl status server-shepherd.service
-journalctl -u server-shepherd.service -n 50 --no-pager
+systemctl status server-shepherd-collect.service
+systemctl status server-shepherd-report.service
+journalctl -u server-shepherd-collect.service -n 50 --no-pager
+journalctl -u server-shepherd-report.service -n 50 --no-pager
 ```
 
 For a `Type=oneshot` service, `inactive (dead)` after a successful run is normal.
@@ -290,7 +334,7 @@ Repeat the same install steps on the second server:
 - create `server_shepherd_env`
 - create that server's `config.toml`
 - create that server's `server_shepherd.env`
-- enable its own `server-shepherd.timer`
+- enable its own collect/report timers
 
 Good practice:
 
@@ -298,11 +342,12 @@ Good practice:
 - keep separate `config.toml` files on each server
 - both servers can send to the same Telegram `chat_id`
 - they do not need to run at the same minute
+- frequent collection can stay local while only the daily summary goes to Telegram
 
 Example:
 
-- `server-a` runs every 30 minutes
-- `server-b` runs every 60 minutes
+- `server-a` collects every 10 minutes and reports daily at 21:00 Berlin time
+- `server-b` collects every 10 minutes and reports daily at 21:00 Berlin time
 
 Both can still send messages into the same bot chat.
 

@@ -6,7 +6,8 @@ import time
 from .config import load_config
 from .message_format import build_status_message
 from .metrics import check_website, collect_metrics
-from .storage import append_jsonl, read_last_jsonl
+from .reporting import build_daily_report_message, build_daily_summary, select_report_window
+from .storage import append_jsonl, read_jsonl, read_last_jsonl
 from .telegram_sender import send_telegram_message
 
 
@@ -67,7 +68,7 @@ def run_once(config_path: str) -> dict[str, object]:
         payload.get("website_ok") is False or "critical" in metric_statuses
     ) else "warning" if "warning" in metric_statuses else "ok"
     append_jsonl(config.output_path, payload)
-    if config.telegram is not None:
+    if config.telegram is not None and config.telegram.send_on_regular_check:
         message = build_status_message(
             payload,
             config.privacy.message_mode,
@@ -83,6 +84,42 @@ def run_once(config_path: str) -> dict[str, object]:
     return payload
 
 
+def run_daily_report(
+    config_path: str,
+    send_telegram: bool = True,
+    save_report: bool = True,
+) -> dict[str, object]:
+    config = load_config(config_path)
+    metrics_rows = read_jsonl(config.output_path)
+    previous_daily_report = read_last_jsonl(config.report.output_path) if save_report else None
+    report_start, report_end, report_rows = select_report_window(
+        metrics_rows,
+        previous_daily_report,
+        config.report.default_window_hours,
+    )
+    summary = build_daily_summary(
+        server_id=config.server_id,
+        start=report_start,
+        end=report_end,
+        rows=report_rows,
+    )
+    if save_report:
+        append_jsonl(config.report.output_path, summary)
+
+    if (
+        send_telegram
+        and config.telegram is not None
+        and config.telegram.send_on_daily_report
+    ):
+        send_telegram_message(
+            bot_token=config.telegram.get_bot_token(),
+            chat_id=config.telegram.chat_id,
+            text=build_daily_report_message(summary),
+        )
+
+    return summary
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect local server metrics.")
     parser.add_argument("--config", default="config.toml", help="Path to TOML config file.")
@@ -91,11 +128,39 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run one collection cycle and exit.",
     )
+    parser.add_argument(
+        "--daily-report",
+        action="store_true",
+        help="Build a daily summary from saved metric snapshots and optionally send it to Telegram.",
+    )
+    parser.add_argument(
+        "--no-telegram",
+        action="store_true",
+        help="Do not send Telegram for this run.",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Build the report without saving it to daily JSONL storage.",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
+
+    if args.daily_report:
+        summary = run_daily_report(
+            args.config,
+            send_telegram=not args.no_telegram,
+            save_report=not args.no_save,
+        )
+        print(
+            f"{'Built' if args.no_save else 'Saved'} daily report for "
+            f"{summary['server_id']} ending at {summary['report_end']} "
+            f"{'without saving to daily JSONL storage.' if args.no_save else 'to configured daily JSONL storage.'}"
+        )
+        return
 
     if args.once:
         payload = run_once(args.config)

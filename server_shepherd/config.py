@@ -28,10 +28,18 @@ class PrivacyConfig:
 
 
 @dataclass(slots=True)
+class ReportConfig:
+    output_path: Path
+    default_window_hours: int
+
+
+@dataclass(slots=True)
 class TelegramConfig:
     enabled: bool
     chat_id: str
     bot_token_env: str
+    send_on_regular_check: bool
+    send_on_daily_report: bool
 
     def get_bot_token(self) -> str:
         token = os.environ.get(self.bot_token_env, "").strip()
@@ -51,6 +59,7 @@ class AgentConfig:
     cpu_sample_seconds: float
     website: WebsiteCheckConfig | None
     privacy: PrivacyConfig
+    report: ReportConfig
     telegram: TelegramConfig | None
     cpu_percent_thresholds: ThresholdConfig
     memory_percent_thresholds: ThresholdConfig
@@ -116,6 +125,8 @@ def _load_telegram_config(section: dict[str, object]) -> TelegramConfig | None:
 
     chat_id = str(section.get("chat_id", "")).strip()
     bot_token_env = str(section.get("bot_token_env", "")).strip()
+    send_on_regular_check = bool(section.get("send_on_regular_check", False))
+    send_on_daily_report = bool(section.get("send_on_daily_report", True))
     if not chat_id:
         raise ValueError("telegram.chat_id must be set when telegram is enabled.")
     if not bot_token_env:
@@ -125,6 +136,20 @@ def _load_telegram_config(section: dict[str, object]) -> TelegramConfig | None:
         enabled=True,
         chat_id=chat_id,
         bot_token_env=bot_token_env,
+        send_on_regular_check=send_on_regular_check,
+        send_on_daily_report=send_on_daily_report,
+    )
+
+
+def _load_report_config(section: dict[str, object]) -> ReportConfig:
+    output_path = Path(section.get("output_path", "./data/daily_metrics.jsonl"))
+    default_window_hours = int(section.get("default_window_hours", 24))
+    if default_window_hours <= 0:
+        raise ValueError("report.default_window_hours must be greater than zero.")
+
+    return ReportConfig(
+        output_path=output_path,
+        default_window_hours=default_window_hours,
     )
 
 
@@ -153,6 +178,7 @@ def load_config(path: str | Path) -> AgentConfig:
 
     website = _load_website_config(data.get("website", {}))
     privacy = _load_privacy_config(data.get("privacy", {}))
+    report = _load_report_config(data.get("report", {}))
     telegram = _load_telegram_config(data.get("telegram", {}))
     thresholds = data.get("thresholds", {})
     cpu_thresholds = _load_threshold(thresholds.get("cpu_percent", {}), 70.0, 90.0)
@@ -167,6 +193,7 @@ def load_config(path: str | Path) -> AgentConfig:
         cpu_sample_seconds=cpu_sample_seconds,
         website=website,
         privacy=privacy,
+        report=report,
         telegram=telegram,
         cpu_percent_thresholds=cpu_thresholds,
         memory_percent_thresholds=memory_thresholds,

@@ -176,8 +176,8 @@ sudo ./server_shepherd/make_services_and_timers.sh .
 ```sh
 cd /home/your-user/server_shepherd
 source server_shepherd_env/bin/activate
-python -m server_shepherd.agent --config config.toml --once
-python -m server_shepherd.agent --config config.toml --daily-report --no-save
+python3 -m server_shepherd.agent --config config.toml --once
+python3 -m server_shepherd.agent --config config.toml --daily-report --no-save
 ```
 
 Confirm:

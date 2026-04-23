@@ -65,7 +65,7 @@ def _problem_details(
     worst_status = str(worst_row.get(status_key, "warning")).capitalize()
     return [
         f"   {worst_status}: {len(problem_rows)} sample{'s' if len(problem_rows) != 1 else ''}",
-        f"   Worst: {_format_problem_time(worst_row)}, {round(float(worst_row[value_key]))}%",
+        f"   Triggered at: {_format_problem_time(worst_row)}, {round(float(worst_row[value_key]))}%",
     ]
 
 

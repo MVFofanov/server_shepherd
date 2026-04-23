@@ -247,8 +247,8 @@ You can generate and enable the services/timers automatically:
 
 ```sh
 cd /home/your-user/server_shepherd
-chmod +x server_shepherd/make_services_and_timers
-sudo ./server_shepherd/make_services_and_timers .
+chmod +x server_shepherd/make_services_and_timers.sh
+sudo ./server_shepherd/make_services_and_timers.sh .
 ```
 
 The script:

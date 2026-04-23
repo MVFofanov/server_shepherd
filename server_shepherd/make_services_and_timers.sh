@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Please run this script with sudo."
-  echo "Example: sudo ./server_shepherd/make_services_and_timers ."
+  echo "Example: sudo ./server_shepherd/make_services_and_timers.sh ."
   exit 1
 fi
 

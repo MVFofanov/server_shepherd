@@ -1,5 +1,7 @@
 # server_shepherd
 
+![Server Shepherd bot icon](images/server_shepherd_bot_icon.png)
+
 Small first step for a privacy-first server monitoring project.
 
 This MVP is intentionally narrow:

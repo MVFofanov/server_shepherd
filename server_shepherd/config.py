@@ -36,10 +36,18 @@ class ReportConfig:
 @dataclass(slots=True)
 class TelegramConfig:
     enabled: bool
-    chat_id: str
+    chat_id_env: str
     bot_token_env: str
     send_on_regular_check: bool
     send_on_daily_report: bool
+
+    def get_chat_id(self) -> str:
+        chat_id = os.environ.get(self.chat_id_env, "").strip()
+        if not chat_id:
+            raise ValueError(
+                f"Telegram is enabled, but environment variable {self.chat_id_env} is not set."
+            )
+        return chat_id
 
     def get_bot_token(self) -> str:
         token = os.environ.get(self.bot_token_env, "").strip()
@@ -123,18 +131,18 @@ def _load_telegram_config(section: dict[str, object]) -> TelegramConfig | None:
     if not section or not bool(section.get("enabled", False)):
         return None
 
-    chat_id = str(section.get("chat_id", "")).strip()
+    chat_id_env = str(section.get("chat_id_env", "SERVER_SHEPHERD_TELEGRAM_CHAT_ID")).strip()
     bot_token_env = str(section.get("bot_token_env", "")).strip()
     send_on_regular_check = bool(section.get("send_on_regular_check", False))
     send_on_daily_report = bool(section.get("send_on_daily_report", True))
-    if not chat_id:
-        raise ValueError("telegram.chat_id must be set when telegram is enabled.")
+    if not chat_id_env:
+        raise ValueError("telegram.chat_id_env must be set when telegram is enabled.")
     if not bot_token_env:
         raise ValueError("telegram.bot_token_env must be set when telegram is enabled.")
 
     return TelegramConfig(
         enabled=True,
-        chat_id=chat_id,
+        chat_id_env=chat_id_env,
         bot_token_env=bot_token_env,
         send_on_regular_check=send_on_regular_check,
         send_on_daily_report=send_on_daily_report,

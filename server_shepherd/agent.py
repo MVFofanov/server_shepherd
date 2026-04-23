@@ -78,7 +78,7 @@ def run_once(config_path: str) -> dict[str, object]:
         )
         send_telegram_message(
             bot_token=config.telegram.get_bot_token(),
-            chat_id=config.telegram.chat_id,
+            chat_id=config.telegram.get_chat_id(),
             text=message,
         )
     return payload
@@ -113,7 +113,7 @@ def run_daily_report(
     ):
         send_telegram_message(
             bot_token=config.telegram.get_bot_token(),
-            chat_id=config.telegram.chat_id,
+            chat_id=config.telegram.get_chat_id(),
             text=build_daily_report_message(summary),
         )
 

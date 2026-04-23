@@ -118,6 +118,29 @@ No Telegram Python package is required right now. The project uses the standard 
 
 ### 4. Create the real config
 
+The easiest way is to generate both `config.toml` and `server_shepherd.env`:
+
+```sh
+chmod +x server_shepherd/set_config_and_telegram.sh
+./server_shepherd/set_config_and_telegram.sh . server_id="second-server" telegram_bot_token="your_bot_token_here" chat_id="your_chat_id_here"
+source ~/.bashrc
+```
+
+If this server has a website to check, add `website_url`:
+
+```sh
+./server_shepherd/set_config_and_telegram.sh . server_id="web-server" telegram_bot_token="your_bot_token_here" chat_id="your_chat_id_here" website_url="https://example.com/"
+source ~/.bashrc
+```
+
+The script writes:
+
+- `config.toml`
+- `server_shepherd.env`
+- Telegram exports into `~/.bashrc`
+
+Manual config creation is also possible:
+
 ```sh
 cp config.example.toml config.toml
 ```
@@ -144,7 +167,7 @@ very_high = 100.0
 
 [telegram]
 enabled = true
-chat_id = "your_chat_id_here"
+chat_id_env = "SERVER_SHEPHERD_TELEGRAM_CHAT_ID"
 bot_token_env = "SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN"
 send_on_regular_check = false
 send_on_daily_report = true
@@ -178,6 +201,7 @@ Create `/home/your-user/server_shepherd/server_shepherd.env`:
 ```sh
 cat > /home/your-user/server_shepherd/server_shepherd.env <<'EOF'
 SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN=your_real_bot_token_here
+SERVER_SHEPHERD_TELEGRAM_CHAT_ID=your_chat_id_here
 EOF
 chmod 600 /home/your-user/server_shepherd/server_shepherd.env
 ```
@@ -223,7 +247,7 @@ Then look for:
 export SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN="your_bot_token_here"
 ```
 
-5. Enable the `[telegram]` section in `config.toml` and set your `chat_id`.
+5. Enable the `[telegram]` section in `config.toml` and set `chat_id_env = "SERVER_SHEPHERD_TELEGRAM_CHAT_ID"`.
 6. Choose a message mode in `[privacy]`:
 
 - `privacy_first`: only safe summaries like `CPU: normal` and `Traffic: low`

@@ -137,6 +137,7 @@ The script writes:
 
 - `config.toml`
 - `server_shepherd.env`
+- `server_shepherd_env`
 - Telegram exports into `~/.bashrc`
 
 Manual config creation is also possible:
@@ -158,7 +159,7 @@ disk_path = "/"
 cpu_sample_seconds = 1.0
 
 [privacy]
-message_mode = "privacy_first"
+message_mode = "middle"
 
 [privacy.traffic_mb]
 medium = 5.0

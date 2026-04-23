@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   echo "Usage:"
-  echo "  ./server_shepherd/set_config_and_telegram.sh <project_dir> server_id=<id> telegram_bot_token=<token> chat_id=<id> [website_url=<url>] [message_mode=privacy_first|middle]"
+  echo "  ./server_shepherd/set_config_and_telegram.sh <project_dir> server_id=<id> telegram_bot_token=<token> chat_id=<id> [website_url=<url>] [message_mode=middle|privacy_first]"
   echo
   echo "Example:"
   echo "  ./server_shepherd/set_config_and_telegram.sh . server_id=server_1 telegram_bot_token=super_secret chat_id=123456"
@@ -22,7 +22,7 @@ SERVER_ID=""
 TELEGRAM_BOT_TOKEN=""
 TELEGRAM_CHAT_ID=""
 WEBSITE_URL=""
-MESSAGE_MODE="privacy_first"
+MESSAGE_MODE="middle"
 
 for arg in "$@"; do
   case "${arg}" in
@@ -62,6 +62,14 @@ fi
 CONFIG_FILE="${PROJECT_DIR}/config.toml"
 ENV_FILE="${PROJECT_DIR}/server_shepherd.env"
 BASHRC_FILE="${HOME}/.bashrc"
+VENV_DIR="${PROJECT_DIR}/server_shepherd_env"
+PYTHON_BIN="${VENV_DIR}/bin/python"
+
+if [[ ! -d "${VENV_DIR}" ]]; then
+  python3 -m venv "${VENV_DIR}"
+fi
+
+"${PYTHON_BIN}" -m pip install --upgrade pip
 
 cat > "${CONFIG_FILE}" <<EOF
 [agent]
@@ -134,11 +142,13 @@ export SERVER_SHEPHERD_TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID}"
 echo "Wrote:"
 echo "  ${CONFIG_FILE}"
 echo "  ${ENV_FILE}"
+echo "  ${VENV_DIR}"
 echo
 echo "Current shell variables exported for this script process."
 echo "For your current interactive shell, run:"
 echo "  source ~/.bashrc"
 echo
 echo "Test commands:"
+echo "  source server_shepherd_env/bin/activate"
 echo "  python -m server_shepherd.agent --config config.toml --once"
 echo "  python -m server_shepherd.agent --config config.toml --daily-report --no-save"

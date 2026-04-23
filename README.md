@@ -307,12 +307,38 @@ sudo systemctl enable --now server-shepherd-collect.timer
 sudo systemctl enable --now server-shepherd-report.timer
 ```
 
+If this server already had the older single-timer setup, disable it to avoid duplicate reports:
+
+```sh
+sudo systemctl disable --now server-shepherd.timer
+```
+
+Optional cleanup after you confirm the new timers work:
+
+```sh
+sudo rm /etc/systemd/system/server-shepherd.timer
+sudo rm /etc/systemd/system/server-shepherd.service
+sudo systemctl daemon-reload
+```
+
 Check timer status:
 
 ```sh
 systemctl status server-shepherd-collect.timer
 systemctl status server-shepherd-report.timer
 systemctl list-timers --all | grep server-shepherd
+```
+
+After upgrading, `systemctl list-timers --all | grep server-shepherd` should show only:
+
+- `server-shepherd-collect.timer`
+- `server-shepherd-report.timer`
+
+Test both services manually:
+
+```sh
+sudo systemctl start server-shepherd-collect.service
+sudo systemctl start server-shepherd-report.service
 ```
 
 Check service logs:
@@ -335,6 +361,7 @@ Repeat the same install steps on the second server:
 - create that server's `config.toml`
 - create that server's `server_shepherd.env`
 - enable its own collect/report timers
+- disable the old `server-shepherd.timer` if it exists
 
 Good practice:
 

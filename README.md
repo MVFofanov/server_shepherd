@@ -98,38 +98,62 @@ sudo apt install python3.12-venv
 
 If your server uses another Python version, install the matching package instead, for example `python3.11-venv`.
 
-### 2. Clone the repository
+### 2. Run The Installer
+
+The easiest setup is the all-in-one installer:
 
 ```sh
-cd /home/your-user
 git clone https://github.com/MVFofanov/server_shepherd.git
-cd /home/your-user/server_shepherd
+cd server_shepherd
+chmod +x install_and_config_server_shepherd.sh
+./install_and_config_server_shepherd.sh \
+  server_id="server_3" \
+  telegram_bot_token="your_bot_token_here" \
+  chat_id="your_chat_id_here"
 ```
 
-### 3. Create the virtual environment
+If this server has a website to check:
 
 ```sh
-python3 -m venv server_shepherd_env
-source server_shepherd_env/bin/activate
-python -m pip install --upgrade pip
+./install_and_config_server_shepherd.sh \
+  server_id="web-server" \
+  telegram_bot_token="your_bot_token_here" \
+  chat_id="your_chat_id_here" \
+  website_url="https://example.com/"
 ```
+
+The installer:
+
+- clones or updates the repository
+- creates `config.toml`
+- creates `server_shepherd.env`
+- creates `server_shepherd_env`
+- writes Telegram exports into `~/.bashrc`
+- creates and enables the collect/report systemd timers
 
 No Telegram Python package is required right now. The project uses the standard library for Telegram API calls.
 
-### 4. Create the real config
+### 3. Manual Script Steps
 
-The easiest way is to generate both `config.toml` and `server_shepherd.env`:
+If you already cloned the repo and only want to rerun setup scripts, use:
 
 ```sh
 chmod +x server_shepherd/set_config_and_telegram.sh
-./server_shepherd/set_config_and_telegram.sh . server_id="second-server" telegram_bot_token="your_bot_token_here" chat_id="your_chat_id_here"
+./server_shepherd/set_config_and_telegram.sh . \
+  server_id="server_3" \
+  telegram_bot_token="your_bot_token_here" \
+  chat_id="your_chat_id_here"
 source ~/.bashrc
 ```
 
 If this server has a website to check, add `website_url`:
 
 ```sh
-./server_shepherd/set_config_and_telegram.sh . server_id="web-server" telegram_bot_token="your_bot_token_here" chat_id="your_chat_id_here" website_url="https://example.com/"
+./server_shepherd/set_config_and_telegram.sh . \
+  server_id="web-server" \
+  telegram_bot_token="your_bot_token_here" \
+  chat_id="your_chat_id_here" \
+  website_url="https://example.com/"
 source ~/.bashrc
 ```
 
@@ -140,76 +164,14 @@ The script writes:
 - `server_shepherd_env`
 - Telegram exports into `~/.bashrc`
 
-Manual config creation is also possible:
+Then set up services and timers:
 
 ```sh
-cp config.example.toml config.toml
+chmod +x server_shepherd/make_services_and_timers.sh
+sudo ./server_shepherd/make_services_and_timers.sh .
 ```
 
-Edit `config.toml` for that server.
-
-Example:
-
-```toml
-[agent]
-server_id = "second-server"
-interval_minutes = 10
-output_path = "./data/metrics.jsonl"
-disk_path = "/"
-cpu_sample_seconds = 1.0
-
-[privacy]
-message_mode = "middle"
-
-[privacy.traffic_mb]
-medium = 5.0
-high = 20.0
-very_high = 100.0
-
-[telegram]
-enabled = true
-chat_id_env = "SERVER_SHEPHERD_TELEGRAM_CHAT_ID"
-bot_token_env = "SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN"
-send_on_regular_check = false
-send_on_daily_report = true
-
-[report]
-output_path = "./data/daily_metrics.jsonl"
-default_window_hours = 24
-
-[website]
-url = "https://example.com/"
-expected_status = 200
-timeout_seconds = 5.0
-
-[thresholds.cpu_percent]
-warning = 70.0
-critical = 90.0
-
-[thresholds.memory_percent]
-warning = 75.0
-critical = 90.0
-
-[thresholds.disk_percent]
-warning = 80.0
-critical = 90.0
-```
-
-### 5. Create the environment file for the bot token
-
-Create `/home/your-user/server_shepherd/server_shepherd.env`:
-
-```sh
-cat > /home/your-user/server_shepherd/server_shepherd.env <<'EOF'
-SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN=your_real_bot_token_here
-SERVER_SHEPHERD_TELEGRAM_CHAT_ID=your_chat_id_here
-EOF
-chmod 600 /home/your-user/server_shepherd/server_shepherd.env
-```
-
-This is better than hardcoding secrets into the `systemd` service file.
-
-### 6. Test one run manually
+### 4. Test One Run
 
 ```sh
 cd /home/your-user/server_shepherd
@@ -223,6 +185,41 @@ Confirm:
 - `data/metrics.jsonl` contains a new JSON line
 - `--daily-report --no-save` builds a preview report without shifting the saved daily-report window
 - the Telegram bot chat receives a message if Telegram is enabled for that command
+
+### 5. Set Up Services And Timers
+
+Create and enable the `systemd` services/timers:
+
+```sh
+chmod +x server_shepherd/make_services_and_timers.sh
+sudo ./server_shepherd/make_services_and_timers.sh .
+```
+
+The script:
+
+- detects the normal Linux user from `sudo`
+- uses the current project directory
+- writes the collect/report service and timer files
+- reloads `systemd`
+- enables both timers
+- disables the old `server-shepherd.timer` if it exists
+
+Check the setup:
+
+```sh
+systemctl status server-shepherd-collect.timer
+systemctl status server-shepherd-report.timer
+systemctl list-timers --all | grep server-shepherd
+```
+
+Check service logs:
+
+```sh
+systemctl status server-shepherd-collect.service
+systemctl status server-shepherd-report.service
+sudo journalctl -u server-shepherd-collect.service -n 50 --no-pager
+sudo journalctl -u server-shepherd-report.service -n 50 --no-pager
+```
 
 ## Telegram Setup
 
@@ -268,10 +265,6 @@ The recommended production setup is two `oneshot` services with two timers:
 - one every 10 minutes for raw metric collection
 - one daily at report time for the Telegram summary
 
-### Automatic Setup
-
-You can generate and enable the services/timers automatically:
-
 ```sh
 cd /home/your-user/server_shepherd
 chmod +x server_shepherd/make_services_and_timers.sh
@@ -292,74 +285,6 @@ Before running it, make sure these files exist:
 - `config.toml`
 - `server_shepherd.env`
 - `server_shepherd_env/bin/python`
-
-### Manual Setup
-
-Create `/etc/systemd/system/server-shepherd-collect.service`:
-
-```ini
-[Unit]
-Description=Server Shepherd metric collection
-
-[Service]
-Type=oneshot
-User=your-user
-WorkingDirectory=/home/your-user/server_shepherd
-EnvironmentFile=/home/your-user/server_shepherd/server_shepherd.env
-ExecStart=/home/your-user/server_shepherd/server_shepherd_env/bin/python -m server_shepherd.agent --config /home/your-user/server_shepherd/config.toml --once
-```
-
-Create `/etc/systemd/system/server-shepherd-collect.timer`:
-
-```ini
-[Unit]
-Description=Run Server Shepherd collection every 10 minutes
-
-[Timer]
-OnCalendar=*:0/10
-Persistent=true
-Unit=server-shepherd-collect.service
-
-[Install]
-WantedBy=timers.target
-```
-
-Create `/etc/systemd/system/server-shepherd-report.service`:
-
-```ini
-[Unit]
-Description=Server Shepherd daily report
-
-[Service]
-Type=oneshot
-User=your-user
-WorkingDirectory=/home/your-user/server_shepherd
-EnvironmentFile=/home/your-user/server_shepherd/server_shepherd.env
-ExecStart=/home/your-user/server_shepherd/server_shepherd_env/bin/python -m server_shepherd.agent --config /home/your-user/server_shepherd/config.toml --daily-report
-```
-
-Create `/etc/systemd/system/server-shepherd-report.timer`:
-
-```ini
-[Unit]
-Description=Run Server Shepherd daily report at 21:00 Berlin time
-
-[Timer]
-OnCalendar=*-*-* 21:00:00 Europe/Berlin
-Persistent=true
-Unit=server-shepherd-report.service
-
-[Install]
-WantedBy=timers.target
-```
-
-Reload and start:
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now server-shepherd-collect.timer
-sudo systemctl enable --now server-shepherd-report.timer
-```
 
 If this server already had the older single-timer setup, disable it to avoid duplicate reports:
 

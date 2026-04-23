@@ -241,6 +241,33 @@ The recommended production setup is two `oneshot` services with two timers:
 - one every 10 minutes for raw metric collection
 - one daily at report time for the Telegram summary
 
+### Automatic Setup
+
+You can generate and enable the services/timers automatically:
+
+```sh
+cd /home/your-user/server_shepherd
+chmod +x server_shepherd/make_services_and_timers
+sudo ./server_shepherd/make_services_and_timers .
+```
+
+The script:
+
+- detects the normal Linux user from `sudo`
+- uses the project directory you pass as the first argument
+- writes the collect/report service and timer files
+- reloads `systemd`
+- enables both timers
+- disables the old `server-shepherd.timer` if it exists
+
+Before running it, make sure these files exist:
+
+- `config.toml`
+- `server_shepherd.env`
+- `server_shepherd_env/bin/python`
+
+### Manual Setup
+
 Create `/etc/systemd/system/server-shepherd-collect.service`:
 
 ```ini

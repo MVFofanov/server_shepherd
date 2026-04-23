@@ -77,7 +77,10 @@ class MetricSnapshot:
     website_response_ms: float | None = None
 
     def as_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {
+            key: value for key, value in asdict(self).items()
+            if value is not None
+        }
 
 
 def _read_memory_total_gb() -> float:

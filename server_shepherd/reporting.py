@@ -141,16 +141,18 @@ def build_daily_summary(
     disk_values = [float(row["disk_percent"]) for row in rows]
     rx_values = [float(row.get("network_rx_delta_mb", 0.0)) for row in rows]
     tx_values = [float(row.get("network_tx_delta_mb", 0.0)) for row in rows]
-    statuses = [str(row.get("status", "ok")) for row in rows]
     cpu_statuses = [str(row.get("cpu_status", "ok")) for row in rows]
     memory_statuses = [str(row.get("memory_status", "ok")) for row in rows]
     disk_statuses = [str(row.get("disk_status", "ok")) for row in rows]
 
-    website_rows = [row for row in rows if "website_ok" in row]
+    website_rows = [row for row in rows if isinstance(row.get("website_ok"), bool)]
     website_ok_count = sum(1 for row in website_rows if row.get("website_ok") is True)
     website_status = "critical" if website_rows and website_ok_count < len(website_rows) else "ok"
 
-    overall_status = _worst_status(statuses)
+    cpu_status = _worst_status(cpu_statuses)
+    memory_status = _worst_status(memory_statuses)
+    disk_status = _worst_status(disk_statuses)
+    overall_status = _worst_status([cpu_status, memory_status, disk_status, website_status])
 
     return {
         "server_id": server_id,
@@ -167,9 +169,9 @@ def build_daily_summary(
         "disk_percent": _round(max(disk_values)),
         "traffic_downloaded_mb": _round(sum(rx_values)),
         "traffic_uploaded_mb": _round(sum(tx_values)),
-        "cpu_status": _worst_status(cpu_statuses),
-        "memory_status": _worst_status(memory_statuses),
-        "disk_status": _worst_status(disk_statuses),
+        "cpu_status": cpu_status,
+        "memory_status": memory_status,
+        "disk_status": disk_status,
         "website_status": website_status,
         "cpu_problem_details": _problem_details(rows, "cpu_status", "cpu_percent"),
         "memory_problem_details": _problem_details(rows, "memory_status", "memory_percent"),

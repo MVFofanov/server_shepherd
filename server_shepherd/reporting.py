@@ -44,6 +44,46 @@ def _round(value: float) -> float:
     return round(value, 2)
 
 
+def _format_problem_time(row: dict[str, object]) -> str:
+    timestamp = _parse_iso_timestamp(row["timestamp"])
+    return timestamp.strftime("%H:%M UTC")
+
+
+def _problem_details(
+    rows: list[dict[str, object]],
+    status_key: str,
+    value_key: str,
+) -> list[str]:
+    problem_rows = [
+        row for row in rows
+        if str(row.get(status_key, "ok")) in {"warning", "critical"}
+    ]
+    if not problem_rows:
+        return []
+
+    worst_row = max(problem_rows, key=lambda row: float(row[value_key]))
+    worst_status = str(worst_row.get(status_key, "warning")).capitalize()
+    return [
+        f"   {worst_status}: {len(problem_rows)} sample{'s' if len(problem_rows) != 1 else ''}",
+        f"   Worst: {_format_problem_time(worst_row)}, {round(float(worst_row[value_key]))}%",
+    ]
+
+
+def _website_problem_details(rows: list[dict[str, object]]) -> list[str]:
+    failed_rows = [
+        row for row in rows
+        if row.get("website_ok") is False
+    ]
+    if not failed_rows:
+        return []
+
+    return [
+        f"   Failed: {len(failed_rows)} sample{'s' if len(failed_rows) != 1 else ''}",
+        f"   First failure: {_format_problem_time(failed_rows[0])}",
+        f"   Last failure: {_format_problem_time(failed_rows[-1])}",
+    ]
+
+
 def select_report_window(
     metrics_rows: list[dict[str, object]],
     previous_daily_report: dict[str, object] | None,
@@ -88,6 +128,10 @@ def build_daily_summary(
             "memory_status": "ok",
             "disk_status": "ok",
             "website_status": "ok",
+            "cpu_problem_details": [],
+            "memory_problem_details": [],
+            "disk_problem_details": [],
+            "website_problem_details": [],
             "website_checks_ok": 0,
             "website_checks_total": 0,
         }
@@ -127,6 +171,10 @@ def build_daily_summary(
         "memory_status": _worst_status(memory_statuses),
         "disk_status": _worst_status(disk_statuses),
         "website_status": website_status,
+        "cpu_problem_details": _problem_details(rows, "cpu_status", "cpu_percent"),
+        "memory_problem_details": _problem_details(rows, "memory_status", "memory_percent"),
+        "disk_problem_details": _problem_details(rows, "disk_status", "disk_percent"),
+        "website_problem_details": _website_problem_details(website_rows),
         "website_checks_ok": website_ok_count,
         "website_checks_total": len(website_rows),
     }
@@ -135,23 +183,38 @@ def build_daily_summary(
 def build_daily_report_message(summary: dict[str, object]) -> str:
     status = str(summary["status"])
     header = f"{summary['server_id']} {_status_icon(status)} ({summary['status_label']})"
-    lines = [
-        header,
-        f"{_status_icon(str(summary['cpu_status']))} CPU avg/max: {round(float(summary['cpu_avg_percent']))}% / {round(float(summary['cpu_max_percent']))}%",
-        f"{_status_icon(str(summary['memory_status']))} RAM avg/max: {round(float(summary['memory_avg_percent']))}% / {round(float(summary['memory_max_percent']))}%",
-        f"{_status_icon(str(summary['disk_status']))} Disk usage: {round(float(summary['disk_percent']))} %",
-        (
-            "✅ Traffic ⬇️ "
-            f"{float(summary['traffic_downloaded_mb']):.2f} MB "
-            "⬆️ "
-            f"{float(summary['traffic_uploaded_mb']):.2f} MB"
-        ),
-    ]
+    lines = [header]
+
+    lines.append(
+        f"{_status_icon(str(summary['cpu_status']))} CPU avg/max: "
+        f"{round(float(summary['cpu_avg_percent']))}% / {round(float(summary['cpu_max_percent']))}%"
+    )
+    lines.extend(str(line) for line in summary["cpu_problem_details"])
+
+    lines.append(
+        f"{_status_icon(str(summary['memory_status']))} RAM avg/max: "
+        f"{round(float(summary['memory_avg_percent']))}% / {round(float(summary['memory_max_percent']))}%"
+    )
+    lines.extend(str(line) for line in summary["memory_problem_details"])
+
+    lines.append(
+        f"{_status_icon(str(summary['disk_status']))} Disk usage: "
+        f"{round(float(summary['disk_percent']))} %"
+    )
+    lines.extend(str(line) for line in summary["disk_problem_details"])
+
+    lines.append(
+        "✅ Traffic ⬇️ "
+        f"{float(summary['traffic_downloaded_mb']):.2f} MB "
+        "⬆️ "
+        f"{float(summary['traffic_uploaded_mb']):.2f} MB"
+    )
 
     if int(summary["website_checks_total"]) > 0:
         lines.append(
             f"{_status_icon(str(summary['website_status']))} Website checks: {summary['website_checks_ok']}/{summary['website_checks_total']} OK"
         )
+        lines.extend(str(line) for line in summary["website_problem_details"])
 
     lines.append(f"• Samples: {summary['sample_count']}")
     return "\n".join(lines)

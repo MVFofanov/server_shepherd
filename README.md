@@ -1,4 +1,4 @@
-# server_shepherd
+# Server Shepherd
 
 ![Server Shepherd bot icon](images/server_shepherd_bot_icon.png)
 

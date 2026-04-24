@@ -43,6 +43,7 @@ Each server can:
 - optionally check a website
 - save snapshots into `data/metrics.jsonl`
 - build a daily summary into `data/daily_metrics.jsonl`
+- build daily traffic plots into `figures/YYYY-MM-DD.png`
 - optionally send a Telegram message after each run or only for the daily report
 - run on its own schedule with `systemd`
 
@@ -186,7 +187,34 @@ Confirm:
 - `--daily-report --no-save` builds a preview report without shifting the saved daily-report window
 - the Telegram bot chat receives a message if Telegram is enabled for that command
 
-### 5. Set Up Services And Timers
+### 5. Build A Daily Traffic Plot
+
+Install matplotlib in the virtual environment once:
+
+```sh
+source server_shepherd_env/bin/activate
+python3 -m pip install matplotlib
+```
+
+Then build a chart for one UTC day:
+
+```sh
+python3 -m server_shepherd.plot_daily_traffic --date 2026-04-23
+```
+
+This reads `data/metrics.jsonl` and saves:
+
+```text
+figures/2026-04-23.png
+```
+
+The plot has:
+
+- top panel: `network_rx_delta_mb`
+- bottom panel: `network_tx_delta_mb`
+- one bar per saved metric sample
+
+### 6. Set Up Services And Timers
 
 Create and enable the `systemd` services/timers:
 

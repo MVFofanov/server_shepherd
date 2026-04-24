@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from statistics import mean
+from zoneinfo import ZoneInfo
 
 
 def _parse_iso_timestamp(value: object) -> datetime:
@@ -70,10 +71,7 @@ def _problem_details(
 
 
 def _website_problem_details(rows: list[dict[str, object]]) -> list[str]:
-    failed_rows = [
-        row for row in rows
-        if row.get("website_ok") is False
-    ]
+    failed_rows = [row for row in rows if row.get("website_ok") is False]
     if not failed_rows:
         return []
 
@@ -84,22 +82,37 @@ def _website_problem_details(rows: list[dict[str, object]]) -> list[str]:
     ]
 
 
-def select_report_window(
-    metrics_rows: list[dict[str, object]],
-    previous_daily_report: dict[str, object] | None,
-    default_window_hours: int,
-) -> tuple[datetime, datetime, list[dict[str, object]]]:
-    end = datetime.now(UTC)
-    if previous_daily_report and "report_end" in previous_daily_report:
-        start = _parse_iso_timestamp(previous_daily_report["report_end"])
-    else:
-        start = end - timedelta(hours=default_window_hours)
+def previous_calendar_day_window(
+    timezone_name: str,
+    now_utc: datetime | None = None,
+) -> tuple[date, datetime, datetime]:
+    if now_utc is None:
+        now_utc = datetime.now(UTC)
 
-    filtered = [
+    tz = ZoneInfo(timezone_name)
+    local_now = now_utc.astimezone(tz)
+    target_day = local_now.date() - timedelta(days=1)
+    local_start = datetime.combine(target_day, datetime.min.time(), tzinfo=tz)
+    local_end = local_start + timedelta(days=1)
+    return target_day, local_start.astimezone(UTC), local_end.astimezone(UTC)
+
+
+def calendar_day_window(day: date, timezone_name: str) -> tuple[datetime, datetime]:
+    tz = ZoneInfo(timezone_name)
+    local_start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
+    local_end = local_start + timedelta(days=1)
+    return local_start.astimezone(UTC), local_end.astimezone(UTC)
+
+
+def select_calendar_day_rows(
+    metrics_rows: list[dict[str, object]],
+    start: datetime,
+    end: datetime,
+) -> list[dict[str, object]]:
+    return [
         row for row in metrics_rows
-        if start < _parse_iso_timestamp(row["timestamp"]) <= end
+        if start <= _parse_iso_timestamp(row["timestamp"]) < end
     ]
-    return start, end, filtered
 
 
 def build_daily_summary(

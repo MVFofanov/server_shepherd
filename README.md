@@ -45,6 +45,7 @@ Each server can:
 - build a daily summary into `data/daily_metrics.jsonl`
 - build daily traffic plots into `figures/YYYY-MM-DD.png`
 - optionally send a Telegram message after each run or only for the daily report
+- optionally send the traffic plot together with the daily report
 - run on its own schedule with `systemd`
 
 This works well for 2 or more servers sending updates to the same Telegram bot chat, even if they report at different times.
@@ -202,6 +203,12 @@ Then build a chart for one UTC day:
 python3 -m server_shepherd.plot_daily_traffic --date 2026-04-23
 ```
 
+Or build yesterday's chart in Berlin time:
+
+```sh
+python3 -m server_shepherd.plot_daily_traffic --previous-day --timezone Europe/Berlin
+```
+
 This reads `data/metrics.jsonl` and saves:
 
 ```text
@@ -227,15 +234,16 @@ The script:
 
 - detects the normal Linux user from `sudo`
 - uses the current project directory
-- writes the collect/report service and timer files
+- writes the collect/plot/report service and timer files
 - reloads `systemd`
-- enables both timers
+- enables the collect, plot, and report timers
 - disables the old `server-shepherd.timer` if it exists
 
 Check the setup:
 
 ```sh
 systemctl status server-shepherd-collect.timer
+systemctl status server-shepherd-plot.timer
 systemctl status server-shepherd-report.timer
 systemctl list-timers --all | grep server-shepherd
 ```
@@ -291,7 +299,8 @@ You can also tune privacy-first traffic labels in `[privacy.traffic_mb]`:
 The recommended production setup is two `oneshot` services with two timers:
 
 - one every 10 minutes for raw metric collection
-- one daily at report time for the Telegram summary
+- one daily at 00:10 Berlin time for the previous day's traffic plot
+- one daily at 09:00 Berlin time for the previous day's Telegram summary
 
 ```sh
 cd /home/your-user/server_shepherd
@@ -303,9 +312,9 @@ The script:
 
 - detects the normal Linux user from `sudo`
 - uses the project directory you pass as the first argument
-- writes the collect/report service and timer files
+- writes the collect/plot/report service and timer files
 - reloads `systemd`
-- enables both timers
+- enables the collect, plot, and report timers
 - disables the old `server-shepherd.timer` if it exists
 
 Before running it, make sure these files exist:
@@ -332,6 +341,7 @@ Check timer status:
 
 ```sh
 systemctl status server-shepherd-collect.timer
+systemctl status server-shepherd-plot.timer
 systemctl status server-shepherd-report.timer
 systemctl list-timers --all | grep server-shepherd
 ```
@@ -339,12 +349,14 @@ systemctl list-timers --all | grep server-shepherd
 After upgrading, `systemctl list-timers --all | grep server-shepherd` should show only:
 
 - `server-shepherd-collect.timer`
+- `server-shepherd-plot.timer`
 - `server-shepherd-report.timer`
 
 Test both services manually:
 
 ```sh
 sudo systemctl start server-shepherd-collect.service
+sudo systemctl start server-shepherd-plot.service
 sudo systemctl start server-shepherd-report.service
 ```
 
@@ -352,9 +364,11 @@ Check service logs:
 
 ```sh
 systemctl status server-shepherd-collect.service
+systemctl status server-shepherd-plot.service
 systemctl status server-shepherd-report.service
-journalctl -u server-shepherd-collect.service -n 50 --no-pager
-journalctl -u server-shepherd-report.service -n 50 --no-pager
+sudo journalctl -u server-shepherd-collect.service -n 50 --no-pager
+sudo journalctl -u server-shepherd-plot.service -n 50 --no-pager
+sudo journalctl -u server-shepherd-report.service -n 50 --no-pager
 ```
 
 For a `Type=oneshot` service, `inactive (dead)` after a successful run is normal.

@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import time
 
 from .config import load_config
 from .message_format import build_status_message
 from .metrics import check_website, collect_metrics
-from .reporting import build_daily_report_message, build_daily_summary, select_report_window
+from .plot_daily_traffic import create_daily_traffic_plot
+from .reporting import (
+    build_daily_report_message,
+    build_daily_summary,
+    calendar_day_window,
+    previous_calendar_day_window,
+    select_calendar_day_rows,
+)
 from .storage import append_jsonl, read_jsonl, read_last_jsonl
-from .telegram_sender import send_telegram_message
+from .telegram_sender import send_telegram_message, send_telegram_photo
 
 
 def _metric_status(value: float, warning: float, critical: float) -> str:
@@ -88,23 +96,35 @@ def run_daily_report(
     config_path: str,
     send_telegram: bool = True,
     save_report: bool = True,
+    report_date: date | None = None,
 ) -> dict[str, object]:
     config = load_config(config_path)
     metrics_rows = read_jsonl(config.output_path)
-    previous_daily_report = read_last_jsonl(config.report.output_path) if save_report else None
-    report_start, report_end, report_rows = select_report_window(
-        metrics_rows,
-        previous_daily_report,
-        config.report.default_window_hours,
-    )
+    if report_date is None:
+        target_day, report_start, report_end = previous_calendar_day_window(config.report.timezone)
+    else:
+        target_day = report_date
+        report_start, report_end = calendar_day_window(report_date, config.report.timezone)
+    report_rows = select_calendar_day_rows(metrics_rows, report_start, report_end)
     summary = build_daily_summary(
         server_id=config.server_id,
         start=report_start,
         end=report_end,
         rows=report_rows,
     )
+    summary["report_day"] = target_day.isoformat()
     if save_report:
         append_jsonl(config.report.output_path, summary)
+
+    plot_path = config.report.figures_dir / f"{target_day.isoformat()}.png"
+    if config.telegram is not None and config.telegram.send_traffic_plot:
+        if not plot_path.exists():
+            plot_path = create_daily_traffic_plot(
+                input_path=config.output_path,
+                day=target_day,
+                output_dir=config.report.figures_dir,
+                timezone_name=config.report.timezone,
+            )
 
     if (
         send_telegram
@@ -116,6 +136,13 @@ def run_daily_report(
             chat_id=config.telegram.get_chat_id(),
             text=build_daily_report_message(summary),
         )
+        if config.telegram.send_traffic_plot:
+            send_telegram_photo(
+                bot_token=config.telegram.get_bot_token(),
+                chat_id=config.telegram.get_chat_id(),
+                photo_path=plot_path,
+                caption=f"{config.server_id} traffic plot for {target_day.isoformat()}",
+            )
 
     return summary
 
@@ -143,6 +170,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Build the report without saving it to daily JSONL storage.",
     )
+    parser.add_argument(
+        "--date",
+        help="For daily report mode, build the report for a specific day in YYYY-MM-DD using the configured report timezone.",
+    )
     return parser
 
 
@@ -154,10 +185,11 @@ def main() -> None:
             args.config,
             send_telegram=not args.no_telegram,
             save_report=not args.no_save,
+            report_date=date.fromisoformat(args.date) if args.date else None,
         )
         print(
             f"{'Built' if args.no_save else 'Saved'} daily report for "
-            f"{summary['server_id']} ending at {summary['report_end']} "
+            f"{summary['server_id']} for {summary['report_day']} "
             f"{'without saving to daily JSONL storage.' if args.no_save else 'to configured daily JSONL storage.'}"
         )
         return

@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+from .reporting import previous_calendar_day_window
 from .storage import read_jsonl
 
 
@@ -11,9 +13,15 @@ def _parse_date(value: str) -> date:
     return date.fromisoformat(value)
 
 
-def _load_day_rows(input_path: Path, day: date) -> list[dict[str, object]]:
-    start = datetime.combine(day, datetime.min.time(), tzinfo=UTC)
-    end = start + timedelta(days=1)
+def _local_day_bounds(day: date, timezone_name: str) -> tuple[datetime, datetime]:
+    tz = ZoneInfo(timezone_name)
+    local_start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
+    local_end = local_start + timedelta(days=1)
+    return local_start.astimezone(UTC), local_end.astimezone(UTC)
+
+
+def _load_day_rows(input_path: Path, day: date, timezone_name: str) -> list[dict[str, object]]:
+    start, end = _local_day_bounds(day, timezone_name)
 
     rows: list[dict[str, object]] = []
     for row in read_jsonl(input_path):
@@ -32,6 +40,7 @@ def create_daily_traffic_plot(
     input_path: Path,
     day: date,
     output_dir: Path,
+    timezone_name: str = "Europe/Berlin",
 ) -> Path:
     try:
         import matplotlib.dates as mdates
@@ -42,11 +51,13 @@ def create_daily_traffic_plot(
             "python3 -m pip install matplotlib"
         ) from exc
 
-    rows = _load_day_rows(input_path, day)
+    rows = _load_day_rows(input_path, day, timezone_name)
     if not rows:
         raise ValueError(f"No metric rows found in {input_path} for {day.isoformat()}.")
 
-    timestamps = [datetime.fromisoformat(str(row["timestamp"])) for row in rows]
+    utc_times = [datetime.fromisoformat(str(row["timestamp"])) for row in rows]
+    local_tz = ZoneInfo(timezone_name)
+    local_times = [timestamp.astimezone(local_tz) for timestamp in utc_times]
     rx_values = [float(row.get("network_rx_delta_mb", 0.0)) for row in rows]
     tx_values = [float(row.get("network_tx_delta_mb", 0.0)) for row in rows]
     server_id = str(rows[0].get("server_id", "server"))
@@ -63,18 +74,18 @@ def create_daily_traffic_plot(
 
     bar_width = timedelta(minutes=8)
 
-    ax_top.bar(timestamps, rx_values, width=bar_width, color="#2a9d8f", edgecolor="#1f6f66")
-    ax_top.set_title(f"{server_id} traffic for {day.isoformat()} (UTC)")
+    ax_top.bar(local_times, rx_values, width=bar_width, color="#2a9d8f", edgecolor="#1f6f66")
+    ax_top.set_title(f"{server_id} traffic for {day.isoformat()} ({timezone_name})")
     ax_top.set_ylabel("Downloaded MB")
     ax_top.grid(axis="y", alpha=0.25)
 
-    ax_bottom.bar(timestamps, tx_values, width=bar_width, color="#e76f51", edgecolor="#b5543c")
+    ax_bottom.bar(local_times, tx_values, width=bar_width, color="#e76f51", edgecolor="#b5543c")
     ax_bottom.set_ylabel("Uploaded MB")
-    ax_bottom.set_xlabel("Time (UTC)")
+    ax_bottom.set_xlabel(f"Time ({timezone_name})")
     ax_bottom.grid(axis="y", alpha=0.25)
 
-    locator = mdates.HourLocator(interval=1)
-    formatter = mdates.DateFormatter("%H:%M")
+    locator = mdates.HourLocator(interval=1, tz=local_tz)
+    formatter = mdates.DateFormatter("%H:%M", tz=local_tz)
     ax_bottom.xaxis.set_major_locator(locator)
     ax_bottom.xaxis.set_major_formatter(formatter)
     fig.autofmt_xdate()
@@ -86,7 +97,12 @@ def create_daily_traffic_plot(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a daily traffic bar plot from metrics JSONL.")
-    parser.add_argument("--date", required=True, help="Day to plot in YYYY-MM-DD format (UTC day).")
+    parser.add_argument("--date", help="Day to plot in YYYY-MM-DD format.")
+    parser.add_argument(
+        "--previous-day",
+        action="store_true",
+        help="Plot the previous calendar day in the chosen timezone.",
+    )
     parser.add_argument(
         "--input",
         default="data/metrics.jsonl",
@@ -97,16 +113,27 @@ def build_parser() -> argparse.ArgumentParser:
         default="figures",
         help="Directory where the PNG file should be saved.",
     )
+    parser.add_argument(
+        "--timezone",
+        default="Europe/Berlin",
+        help="Timezone used to interpret the requested day.",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    day = _parse_date(args.date)
+    if args.previous_day:
+        day = previous_calendar_day_window(args.timezone)[0]
+    elif args.date:
+        day = _parse_date(args.date)
+    else:
+        raise SystemExit("Use either --date YYYY-MM-DD or --previous-day.")
     output_path = create_daily_traffic_plot(
         input_path=Path(args.input),
         day=day,
         output_dir=Path(args.output_dir),
+        timezone_name=args.timezone,
     )
     print(f"Saved plot to {output_path}")
 

@@ -19,10 +19,13 @@ chat_id_env = "SERVER_SHEPHERD_TELEGRAM_CHAT_ID"
 bot_token_env = "SERVER_SHEPHERD_TELEGRAM_BOT_TOKEN"
 send_on_regular_check = false
 send_on_daily_report = true
+send_traffic_plot = true
 
 [report]
 output_path = "./data/daily_metrics.jsonl"
 default_window_hours = 24
+timezone = "Europe/Berlin"
+figures_dir = "./figures"
 
 [thresholds.cpu_percent]
 warning = 70.0

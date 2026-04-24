@@ -31,6 +31,8 @@ class PrivacyConfig:
 class ReportConfig:
     output_path: Path
     default_window_hours: int
+    timezone: str
+    figures_dir: Path
 
 
 @dataclass(slots=True)
@@ -40,6 +42,7 @@ class TelegramConfig:
     bot_token_env: str
     send_on_regular_check: bool
     send_on_daily_report: bool
+    send_traffic_plot: bool
 
     def get_chat_id(self) -> str:
         chat_id = os.environ.get(self.chat_id_env, "").strip()
@@ -135,6 +138,7 @@ def _load_telegram_config(section: dict[str, object]) -> TelegramConfig | None:
     bot_token_env = str(section.get("bot_token_env", "")).strip()
     send_on_regular_check = bool(section.get("send_on_regular_check", False))
     send_on_daily_report = bool(section.get("send_on_daily_report", True))
+    send_traffic_plot = bool(section.get("send_traffic_plot", True))
     if not chat_id_env:
         raise ValueError("telegram.chat_id_env must be set when telegram is enabled.")
     if not bot_token_env:
@@ -146,18 +150,23 @@ def _load_telegram_config(section: dict[str, object]) -> TelegramConfig | None:
         bot_token_env=bot_token_env,
         send_on_regular_check=send_on_regular_check,
         send_on_daily_report=send_on_daily_report,
+        send_traffic_plot=send_traffic_plot,
     )
 
 
 def _load_report_config(section: dict[str, object]) -> ReportConfig:
     output_path = Path(section.get("output_path", "./data/daily_metrics.jsonl"))
     default_window_hours = int(section.get("default_window_hours", 24))
+    timezone = str(section.get("timezone", "Europe/Berlin")).strip() or "Europe/Berlin"
+    figures_dir = Path(section.get("figures_dir", "./figures"))
     if default_window_hours <= 0:
         raise ValueError("report.default_window_hours must be greater than zero.")
 
     return ReportConfig(
         output_path=output_path,
         default_window_hours=default_window_hours,
+        timezone=timezone,
+        figures_dir=figures_dir,
     )
 
 

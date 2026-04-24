@@ -78,12 +78,24 @@ EnvironmentFile=${ENV_FILE}
 ExecStart=${PYTHON_BIN} -m server_shepherd.agent --config ${CONFIG_FILE} --daily-report
 EOF
 
+cat > /etc/systemd/system/server-shepherd-plot.service <<EOF
+[Unit]
+Description=Server Shepherd daily traffic plot
+
+[Service]
+Type=oneshot
+User=${RUN_USER}
+WorkingDirectory=${PROJECT_DIR}
+EnvironmentFile=${ENV_FILE}
+ExecStart=${PYTHON_BIN} -m server_shepherd.plot_daily_traffic --previous-day --input ${PROJECT_DIR}/data/metrics.jsonl --output-dir ${PROJECT_DIR}/figures --timezone Europe/Berlin
+EOF
+
 cat > /etc/systemd/system/server-shepherd-report.timer <<EOF
 [Unit]
-Description=Run Server Shepherd daily report at 21:00 Berlin time
+Description=Run Server Shepherd daily report at 09:00 Berlin time
 
 [Timer]
-OnCalendar=*-*-* 21:00:00 Europe/Berlin
+OnCalendar=*-*-* 09:00:00 Europe/Berlin
 Persistent=true
 Unit=server-shepherd-report.service
 
@@ -91,8 +103,22 @@ Unit=server-shepherd-report.service
 WantedBy=timers.target
 EOF
 
+cat > /etc/systemd/system/server-shepherd-plot.timer <<EOF
+[Unit]
+Description=Run Server Shepherd daily traffic plot at 00:10 Berlin time
+
+[Timer]
+OnCalendar=*-*-* 00:10:00 Europe/Berlin
+Persistent=true
+Unit=server-shepherd-plot.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
 systemctl daemon-reload
 systemctl enable --now server-shepherd-collect.timer
+systemctl enable --now server-shepherd-plot.timer
 systemctl enable --now server-shepherd-report.timer
 
 if systemctl list-unit-files server-shepherd.timer >/dev/null 2>&1; then
@@ -109,8 +135,11 @@ systemctl list-timers --all | grep server-shepherd || true
 echo
 echo "Useful checks:"
 echo "  systemctl status server-shepherd-collect.timer"
+echo "  systemctl status server-shepherd-plot.timer"
 echo "  systemctl status server-shepherd-report.timer"
 echo "  systemctl status server-shepherd-collect.service"
+echo "  systemctl status server-shepherd-plot.service"
 echo "  systemctl status server-shepherd-report.service"
 echo "  journalctl -u server-shepherd-collect.service -n 50 --no-pager"
+echo "  journalctl -u server-shepherd-plot.service -n 50 --no-pager"
 echo "  journalctl -u server-shepherd-report.service -n 50 --no-pager"
